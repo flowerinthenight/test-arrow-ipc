@@ -1,7 +1,84 @@
 package main
 
-import "log/slog"
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"log/slog"
+
+	"github.com/apache/arrow/go/v17/arrow"
+	"github.com/apache/arrow/go/v17/arrow/array"
+	"github.com/apache/arrow/go/v17/arrow/ipc"
+	"github.com/apache/arrow/go/v17/arrow/memory"
+)
 
 func main() {
-	slog.Info("hello world")
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "intField", Type: arrow.PrimitiveTypes.Int64, Nullable: false},
+		{Name: "stringField", Type: arrow.BinaryTypes.String, Nullable: false},
+		{Name: "floatField", Type: arrow.PrimitiveTypes.Float64, Nullable: true},
+	}, nil)
+
+	fmt.Println(schema.String())
+
+	builder := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+	defer builder.Release()
+
+	builder.Field(0).(*array.Int64Builder).AppendValues([]int64{1, 2, 3, 4, 5}, nil)
+	builder.Field(1).(*array.StringBuilder).AppendValues([]string{"a", "b", "c", "d", "e"}, nil)
+	builder.Field(2).(*array.Float64Builder).AppendValues([]float64{1, 0, 3, 0, 5}, []bool{true, false, true, false, true})
+
+	rec := builder.NewRecord()
+	defer rec.Release()
+	slog.Info("rec:", "cols", rec.NumCols(), "rows", rec.NumRows())
+
+	var buf bytes.Buffer
+	w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
+
+	w.Write(rec)
+	w.Close()
+	fmt.Printf("%X\n", buf.Bytes())
+
+	sliceAndWrite := func(rec arrow.Record, schema *arrow.Schema) {
+		slice := rec.NewSlice(1, 2)
+		defer slice.Release()
+
+		fmt.Println(slice.Columns()[0].(*array.String).Value(0))
+
+		var buf bytes.Buffer
+		w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
+		w.Write(slice)
+		w.Close()
+	}
+	_ = sliceAndWrite
+
+	r, err := ipc.NewReader(&buf)
+	if err != nil {
+		slog.Error("NewReader failed:", "err", err)
+		return
+	}
+
+	var i = -1
+	defer r.Release()
+	for {
+		i++
+		rc, err := r.Read()
+		if err == io.EOF {
+			slog.Info("EOF", "i", i)
+			break
+		}
+
+		if err != nil {
+			slog.Info("Read failed", "i", i, "err", err)
+			break
+		}
+
+		slog.Info("rec:", "i", i, "cols", rc.NumCols(), "rows", rc.NumRows())
+	}
+
+	// tbl := array.NewTableFromRecords(schema, []arrow.Record{rec})
+	// defer tbl.Release()
+
+	// sum := math.Float64.Sum(tbl.Column(2).Data().Chunk(0).(*array.Float64))
+	// slog.Info("dbg:", "sum", sum)
 }
