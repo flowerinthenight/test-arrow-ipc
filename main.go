@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
 	"github.com/apache/arrow/go/v17/arrow/ipc"
+	"github.com/apache/arrow/go/v17/arrow/math"
 	"github.com/apache/arrow/go/v17/arrow/memory"
 )
 
@@ -74,11 +75,9 @@ func main() {
 		}
 
 		slog.Info("rec:", "i", i, "cols", rc.NumCols(), "rows", rc.NumRows())
+		tbl := array.NewTableFromRecords(schema, []arrow.Record{rc})
+		sum := math.Float64.Sum(tbl.Column(2).Data().Chunk(0).(*array.Float64))
+		slog.Info("dbg:", "sum", sum)
+		tbl.Release()
 	}
-
-	// tbl := array.NewTableFromRecords(schema, []arrow.Record{rec})
-	// defer tbl.Release()
-
-	// sum := math.Float64.Sum(tbl.Column(2).Data().Chunk(0).(*array.Float64))
-	// slog.Info("dbg:", "sum", sum)
 }
