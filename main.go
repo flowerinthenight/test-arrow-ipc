@@ -33,25 +33,46 @@ func main() {
 	defer rec.Release()
 	slog.Info("rec:", "cols", rec.NumCols(), "rows", rec.NumRows())
 
+	builder2 := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+	defer builder2.Release()
+
+	builder2.Field(0).(*array.Int64Builder).AppendValues([]int64{6, 7, 8, 9, 10}, nil)
+	builder2.Field(1).(*array.StringBuilder).AppendValues([]string{"f", "g", "h", "i", "j"}, nil)
+	builder2.Field(2).(*array.Float64Builder).AppendValues([]float64{2, 0, 6, 0, 10}, []bool{true, false, true, false, true})
+
+	rec2 := builder2.NewRecord()
+	defer rec2.Release()
+	slog.Info("rec2:", "cols", rec2.NumCols(), "rows", rec2.NumRows())
+
 	var buf bytes.Buffer
 	w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
 
-	w.Write(rec)
-	w.Close()
-	fmt.Printf("%X\n", buf.Bytes())
-
-	sliceAndWrite := func(rec arrow.Record, schema *arrow.Schema) {
-		slice := rec.NewSlice(1, 2)
-		defer slice.Release()
-
-		fmt.Println(slice.Columns()[0].(*array.String).Value(0))
-
-		var buf bytes.Buffer
-		w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
-		w.Write(slice)
-		w.Close()
+	err := w.Write(rec)
+	if err != nil {
+		slog.Error("Write failed:", "err", err)
+		return
 	}
-	_ = sliceAndWrite
+	err = w.Write(rec2)
+	if err != nil {
+		slog.Error("Write failed:", "err", err)
+		return
+	}
+
+	w.Close() // cont + 0-len meta
+	fmt.Printf("[%v] %X\n", buf.Len(), buf.Bytes())
+
+	// sliceAndWrite := func(rec arrow.Record, schema *arrow.Schema) {
+	// 	slice := rec.NewSlice(1, 2)
+	// 	defer slice.Release()
+
+	// 	fmt.Println(slice.Columns()[0].(*array.String).Value(0))
+
+	// 	var buf bytes.Buffer
+	// 	w := ipc.NewWriter(&buf, ipc.WithSchema(schema), ipc.WithZstd())
+	// 	w.Write(slice)
+	// 	w.Close()
+	// }
+	// _ = sliceAndWrite
 
 	r, err := ipc.NewReader(&buf)
 	if err != nil {
