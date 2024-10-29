@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 
 	"github.com/apache/arrow/go/v17/arrow"
 	"github.com/apache/arrow/go/v17/arrow/array"
@@ -60,6 +61,8 @@ func main() {
 
 	w.Close() // cont + 0-len meta
 	fmt.Printf("[%v] %X\n", buf.Len(), buf.Bytes())
+
+	os.WriteFile("simple.arrow", buf.Bytes(), 0644)
 
 	// sliceAndWrite := func(rec arrow.Record, schema *arrow.Schema) {
 	// 	slice := rec.NewSlice(1, 2)
